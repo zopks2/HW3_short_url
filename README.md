@@ -20,8 +20,8 @@
 
 1.  **Клонируйте репозиторий (если еще не сделали):**
     ```bash
-    git clone <your-repository-url>
-    cd short-url-project
+    git clone https://github.com/zopks2/HW3_short_url
+    cd HW3_short_url
     ```
 
 2.  **Настройте переменные окружения (опционально):**

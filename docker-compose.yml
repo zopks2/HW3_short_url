@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Сервис для FastAPI приложения
+  web:
+    build: . # Собираем образ из Dockerfile в текущей директории
+    container_name: shorturl_web # Имя контейнера
+    # Запускаем uvicorn с --reload для разработки
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      # Монтируем код проекта внутрь контейнера для live reload
+      - .:/app
+    ports:
+      # Пробрасываем порт 8008 хоста на порт 8000 контейнера
+      - "8008:8000"
+    environment:
+      # Переменные для подключения к БД и Redis внутри сети Docker
+      - DB_HOST=postgres # <--- Имя сервиса PostgreSQL
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - REDIS_HOST=redis  # <--- Имя сервиса Redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres: # <--- Исправляем ссылку на сервис базы данных
+        condition: service_healthy # Ждем, пока healthcheck db не станет успешным
+      redis:
+        condition: service_started # Ждем старта redis (можно добавить healthcheck и для него)
+    networks: # <--- Подключаем сервис к сети
+      - network
+
+  # Сервис для PostgreSQL
+  postgres: # <--- Убедимся, что имя сервиса 'postgres'
+    image: postgres:15 # Или postgres:17.4 как в вашем примере
+    container_name: shorturl_db # Или postgres как в вашем примере, главное консистентность с DB_HOST
+    volumes:
+      # Сохраняем данные PostgreSQL в именованный том 'postgres_data'
+      - postgres_data:/var/lib/postgresql/data/
+    expose:
+      # Открываем порт 5432 только для других контейнеров в этой же сети
+      - ${DB_PORT:-5432}
+    environment:
+      # Стандартные переменные для инициализации PostgreSQL
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: # <--- Подключаем сервис к сети
+      - network
+
+  # Сервис для Redis
+  redis:
+    image: redis:7-alpine # Используем официальный образ Redis
+    container_name: shorturl_redis
+    expose:
+      # Открываем порт 6379 только для других контейнеров в сети
+      - 6379
+    healthcheck:
+        # Проверка, что Redis отвечает на команду PING
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 5s
+        timeout: 3s
+        retries: 5
+    restart: unless-stopped
+    networks: # <--- Подключаем сервис к сети
+      - network
+
+volumes:
+  postgres_data:
+
+# Определяем сеть, к которой будут подключены все контейнеры
+networks:
+  network:
+    driver: bridge
+
+# --- Конец файла ---
